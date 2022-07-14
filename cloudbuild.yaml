@@ -27,5 +27,7 @@ images: ["gcr.io/$PROJECT_ID/hellospring"]
 substitutions:
     _TESTVAR: "test"
 options:
-    dynamicSubstitutions: false
+      dynamic_substitutions: true
+      substitution_option: 'ALLOW_LOOSE'
+      machineType: $_MACHINE_TYPE
 # [END cloudbuild_maven]
