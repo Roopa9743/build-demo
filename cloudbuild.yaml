@@ -103,5 +103,5 @@ steps:
     args: ['./create-crons.sh']
 options:
  machineType: $_MACHINE_TYPE
- 
+ dynamic_substitutions: true
 
