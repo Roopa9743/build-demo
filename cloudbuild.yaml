@@ -101,4 +101,5 @@ steps:
       - 'TASK_PAUSE=$_TASK_PAUSE'
     entrypoint: 'bash'
     args: ['./create-crons.sh']
-
+options:
+ machineType: 'E2_HIGHCPU_8'
