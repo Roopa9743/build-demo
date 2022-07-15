@@ -105,4 +105,3 @@ options:
   machineType: $_MACHINE_TYPE
   substitution_option: 'ALLOW_LOOSE'
   dynamic_substitutions: true
- timeout: 3600s
