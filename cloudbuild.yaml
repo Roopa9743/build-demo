@@ -101,7 +101,4 @@ steps:
       - 'TASK_PAUSE=$_TASK_PAUSE'
     entrypoint: 'bash'
     args: ['./create-crons.sh']
-options:
-  machineType: $_MACHINE_TYPE
-  substitution_option: 'ALLOW_LOOSE'
-  dynamic_substitutions: true
+
