@@ -102,7 +102,7 @@ steps:
     entrypoint: 'bash'
     args: ['./create-crons.sh']
 
-    options:
+   - options:
         dynamic_substitutions: true
         substitution_option: 'ALLOW_LOOSE'
         machineType: $_MACHINE_TYPE
