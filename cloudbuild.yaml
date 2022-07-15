@@ -104,4 +104,5 @@ steps:
 options:
  machineType: $_MACHINE_TYPE
  dynamic_substitutions: true
+ substitution_option: 'ALLOW_LOOSE'
 
