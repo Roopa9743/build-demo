@@ -13,21 +13,97 @@
 # limitations under the License.
 # [START cloudbuild_maven]
 steps:
-  - name: ubuntu
-    args: ['echo', 'hello ${a.b.c}']
-  - name: maven:3-jdk-8
-    entrypoint: mvn
-    args: ["test"]
-  - name: maven:3-jdk-8
-    entrypoint: mvn
-    args: ["package", "-Dmaven.test.skip=true"]
-  - name: gcr.io/cloud-builders/docker
-    args: ["build", "-t", "gcr.io/$PROJECT_ID/hellospring", "--build-arg=JAR_FILE=target/hello-spring-1.0.0.jar", "."]
-images: ["gcr.io/$PROJECT_ID/hellospring"]
-substitutions:
-    _TESTVAR: "test"
-options:
-      dynamic_substitutions: true
-      substitution_option: 'ALLOW_LOOSE'
-      machineType: 'N1_HIGHCPU_8'
-# [END cloudbuild_maven]
+  # Build Backend image and push with kaniko
+  - name: 'gcr.io/kaniko-project/executor:latest'
+    id: '[Backend] Build & Push image'
+    args:
+      - --dockerfile=backend/Dockerfile
+      - --destination=$_BACKEND_IMAGE_REPO:$_APP_VERSION
+      - --destination=$_BACKEND_IMAGE_REPO:$_PROJECT
+      - --cache=true
+      - --build-arg=user=user
+      - --build-arg=uid=1000
+      - --context=/workspace/backend
+      - --target=production
+
+  # Build Frontend image and push with kaniko
+  - name: 'gcr.io/kaniko-project/executor:latest'
+    id: '[Frontend] Build & Push image'
+    args:
+      - --dockerfile=frontend/Dockerfile
+      - --destination=$_FRONTEND_IMAGE_REPO:$_APP_VERSION
+      - --destination=$_FRONTEND_IMAGE_REPO:$_PROJECT
+      - --cache=true
+      - --build-arg=REACT_APP_VERSION=$_APP_VERSION
+      - --build-arg=REACT_APP_WEBSITE_NAME=$_WEBSITE_NAME
+      - --build-arg=REACT_APP_BACKEND_BASE_URL=$_BACKEND_URL
+      - --build-arg=REACT_APP_GOOGLE_MAP_KEY=$_GOOGLE_MAP_KEY
+      - --context=/workspace/frontend
+      - --target=production
+
+  # Laravel Migration
+  - name: 'gcr.io/google-appengine/exec-wrapper'
+    id: 'Laravel Migration'
+    args: [
+      '-i', $_BACKEND_IMAGE_REPO:$_PROJECT,
+      '-e', 'DB_CONNECTION=$_DB_CONNECTION',
+      '-e', 'DB_SOCKET=$_DB_SOCKET',
+      '-e', 'DB_PORT=$_DB_PORT',
+      '-e', 'DB_DATABASE=$_DB_DATABASE',
+      '-e', 'DB_USERNAME=$_DB_USERNAME',
+      '-e', 'DB_PASSWORD=$_DB_PASSWORD',
+      '-s', $_DB_INSTANCE_NAME,
+      '--', 'scripts/migration.sh', '--config=$_MIGRATION_CONFIG'
+    ]
+    waitFor:
+      - '[Backend] Build & Push image'
+      - '[Frontend] Build & Push image'
+
+ # Deploy Backend image to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: '[Backend] Cloud Run Deployment'
+    entrypoint: gcloud
+    args: [
+      'run', 'deploy', '$_BACKEND_SERVICE_NAME',
+      '--image', '$_BACKEND_IMAGE_REPO:$_PROJECT', 
+      '--region', '$_REGION',
+      '--update-env-vars', 'APP_VERSION=$TAG_NAME'
+    ]
+    waitFor:
+      - '[Backend] Build & Push image'
+      - '[Frontend] Build & Push image'
+      - 'Laravel Migration'
+
+  # Deploy Frontend image to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: '[Frontend] Cloud Run Deployment'
+    entrypoint: gcloud
+    args: [
+      'run', 'deploy', '$_FRONTEND_SERVICE_NAME',
+      '--image', '$_FRONTEND_IMAGE_REPO:$_PROJECT',
+      '--region', '$_REGION'
+    ]
+    waitFor:
+      - '[Backend] Build & Push image'
+      - '[Frontend] Build & Push image'
+      - 'Laravel Migration'
+      - '[Backend] Cloud Run Deployment'
+
+  # Deploy Cloud Scheduler Crons
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'Deploy Cloud Scheduler Crons'
+    env:
+      - 'PROJECT_ID=$PROJECT_ID'
+      - 'PROJECT=$_PROJECT'
+      - 'REGION=$_REGION'
+      - 'BACKEND_URL=$_BACKEND_URL'
+      - 'TASK_MANAGER_TOKEN=$_TASK_MANAGER_TOKEN'
+      - 'TASK_PAUSE=$_TASK_PAUSE'
+    entrypoint: 'bash'
+    args: ['./create-crons.sh']
+
+ options:
+  dynamic_substitutions: true
+  substitution_option: 'ALLOW_LOOSE'
+  machineType: $_MACHINE_TYPE
+ timeout: 3600s
