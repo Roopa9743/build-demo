@@ -12,7 +12,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-FROM openjdk:8-jdk-alpine
-ARG JAR_FILE=JAR_FILE_MUST_BE_SPECIFIED_AS_BUILD_ARG
-COPY ${JAR_FILE} app.jar
-ENTRYPOINT ["java", "-Djava.security.edg=file:/dev/./urandom","-jar","/app.jar"]
+FROM mcr.microsoft.com/dotnet/aspnet:7.0 AS base
+WORKDIR /app
+EXPOSE 80
+EXPOSE 8080
+EXPOSE 443
+
+FROM mcr.microsoft.com/dotnet/sdk:7.0 AS build
+WORKDIR /src
+COPY ["Cyclee.API/Cyclee.API.csproj", "Cyclee.API/"]
+COPY ["Cyclee.API.Domain/Cyclee.API.Domain.csproj", "Cyclee.API.Domain/"]
+COPY ["Cyclee.API.Infrastructure/Cyclee.API.Infrastructure.csproj", "Cyclee.API.Infrastructure/"]
+RUN dotnet restore "Cyclee.API/Cyclee.API.csproj"
+COPY . .
+WORKDIR "/src/Cyclee.API"
+RUN dotnet build "Cyclee.API.csproj" -c Release -o /app/build
+
+FROM build AS publish
+RUN dotnet publish "Cyclee.API.csproj" -c Release -o /app/publish
+
+FROM base AS final
+WORKDIR /app
+COPY --from=publish /app/publish .
+ENTRYPOINT ["dotnet", "Cyclee.API.dll"]
